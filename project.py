@@ -103,5 +103,4 @@ if __name__ == '__main__':
     data, classes = parse_data("./comments.csv")
     print(len(data))
 
-# print(len(classes))
 get_count(classes)
