@@ -31,7 +31,7 @@ class Clustering(object):
 # RevRank Algorithm
 class RevRank():
     def __init__(self, trainX, testX, testY, corpus_data, m=200):
-        self.trainX, self.trainX_class = trainX
+        self.trainX, self.trainX_class, self.rawX = trainX
         self.testX, self.testY = testX, testY
         self.corpus_data = corpus_data
         self.trainX_freq = get_count(self.trainX_class)
@@ -45,6 +45,73 @@ class RevRank():
         self.scores_classes, self.scores, self.scores_classes_avg = self.score(self.trainX)
         print("Labeling")
         self.labels_classes, self.labels = self.label(self.trainX)
+
+    # Getter methods
+    def get_model(self):
+        return self.model
+
+    def get_features(self):
+        return self.features_classes, self.features
+
+    def get_scores(self):
+        return self.scores_classes, self.scores, self.scores_classes_avg
+
+    def get_labels(self):
+        return self.labels_classes, self.labels
+
+    # Method to get the most helpful comments and corresponding indices in the training data for a particular class
+    def get_most_helpful_per_class(self, major, k, reverse=False):
+        major_scores = self.scores_classes[major]
+        if reverse:
+            major_scores.reverse()
+        n = len(major_scores)
+        if k > n:
+            k = n
+
+        helpful = []
+        top_k_indices = []
+        for i in range(k):
+            index, score = major_scores[i]
+            helpful.append(self.rawX[index])
+            top_k_indices.append(index)
+
+        return helpful, top_k_indices
+
+    # Method to get the most helpful comments and corresponding indices in the training data
+    def get_most_helpful_in_model(self, k, reverse=False):
+        data_scores = self.scores
+        data_scores_indices = [i[0] for i in sorted(enumerate(data_scores), key=operator.itemgetter(1), reverse=True)]
+        if reverse:
+            data_scores_indices.reverse()
+        n = len(data_scores)
+        if k > n:
+            k = n
+
+        helpful = []
+        top_k_indices = data_scores_indices[:k]
+        for index in top_k_indices:
+            helpful.append(self.rawX[index])
+
+        return helpful, top_k_indices
+
+
+    # Method to get the most helpful comments and corresponding indices according to the data parameter.
+    def get_most_helpful(self, data, k, c=20, l=25, reverse=False):
+        data_scores_classes, data_scores, data_scores_classes_avg = self.score(data, c, l)
+        data_scores_indices = [i[0] for i in sorted(enumerate(data_scores), key=operator.itemgetter(1), reverse=True)]
+        if reverse:
+            data_scores_indices.reverse()
+        n = len(data_scores)
+        if k > n:
+            k = n
+
+        helpful = []
+        top_k_indices = data_scores_indices[:k]
+        for index in top_k_indices:
+            helpful.append(data[index])
+
+        return helpful, top_k_indices
+
 
     # Helper methods
     def _getClass(self, comment):
@@ -86,14 +153,14 @@ class RevRank():
     def featurize(self, data):
         features_classes = {}
         features = []
-        for comment in data:
+        for (i, comment) in enumerate(data):
             comment_major = self._getClass(comment)
             comment_feats = self.featurize_example(comment)
             features.append(comment_feats)
             if comment_major not in features_classes:
-                features_classes[comment_major] = [comment_feats]
+                features_classes[comment_major] = [(i, comment_feats)]
             else:
-                features_classes[comment_major].append(comment_feats)
+                features_classes[comment_major].append((i, comment_feats))
 
         return features_classes, features
 
@@ -113,20 +180,24 @@ class RevRank():
     def score(self, data, c=20, l=25):
         scores_classes = {}
         scores = []
-        for comment in data:
+        for (i, comment) in enumerate(data):
             comment_major = self._getClass(comment)
             comment_score = self.score_example(comment, c, l)
             scores.append(comment_score)
             if comment_major not in scores_classes:
-                scores_classes[comment_major] = [comment_score]
+                scores_classes[comment_major] = [(i, comment_score)]
             else:
-                scores_classes[comment_major].append(comment_score)
+                scores_classes[comment_major].append((i, comment_score))
 
         scores_classes_avg = {}
         for major, major_scores in scores_classes.items():
-            s = sum(major_scores)
+            s = sum([x[1] for x in major_scores])
             n = len(major_scores)
             scores_classes_avg[major] = (s * 1.0) / n
+
+        for major, major_scores in scores_classes.items():
+            major_scores = sorted(major_scores, key=operator.itemgetter(1), reverse=True)
+            scores_classes[major] = major_scores
 
         return scores_classes, scores, scores_classes_avg
 
@@ -145,14 +216,14 @@ class RevRank():
     def label(self, data, c=20, l=25):
         labels_classes = {}
         labels = []
-        for comment in data:
+        for (i, comment) in enumerate(data):
             comment_major = self._getClass(comment)
             comment_label = self.label_example(comment, c, l)
             labels.append(comment_label)
             if comment_major not in labels_classes:
-                labels_classes[comment_major] = [comment_label]
+                labels_classes[comment_major] = [(i, comment_label)]
             else:
-                labels_classes[comment_major].append(comment_label)
+                labels_classes[comment_major].append((i, comment_label))
 
         return labels_classes, labels
 
@@ -162,7 +233,7 @@ class RevRank():
         test_labels_classes, test_labels = self.label(self.testX)
         correct = 0
         n = 0
-        for i, label in test_labels:
+        for i, label in enumerate(test_labels):
             real_label = self.testY[i]
             if real_label == label:
                 correct += 1
@@ -271,93 +342,6 @@ def parse_BCN_data(path):
 
     return freq
 
-# Method to calculate the dominance of each word, and return a dictionary of
-# {Major : {word : dominance value}} and a dictionary of {Major : top m dominance [word]}
-def calc_dominance(freq, freq_corpus, c, m):
-    dom = {}
-    topdom = {}
-    for major, counts in freq.items():
-        dom[major] = {}
-        for word, count in counts.items():
-            Bval = freq_corpus[word] if word in freq_corpus else 4
-            Dval = count * c * (1 / math.log(Bval))
-            dom[major][word] = Dval
-
-        major_doms = sorted(dom[major].items(), key=operator.itemgetter(1), reverse=True)
-        major_doms = major_doms[:m]
-        major_doms = [x[0] for x in major_doms]
-        topdom[major] = major_doms
-
-    return dom, topdom
-
-def calc_feat_score(comment, topdom, m, c, l):
-    key = ''.join([i for i in comment[2] if not i.isdigit()])
-    words = comment[4:]
-    comment_feats = [0] * m
-    key_optimal_feats = topdom[key]
-    # Compute features
-    for word in words:
-        if word in key_optimal_feats:
-            word_i = key_optimal_feats.index(word)
-            comment_feats[word_i] = 1
-
-    # Compute score
-    r = len(words)
-    d = sum([i*j for (i, j) in zip(comment_feats, [1] * m)])
-    p = c if r <= l else 1
-    score = (1.0 / p) * (d * 1.0 / r)
-
-    return comment, comment_feats, sum(comment_feats), score
-
-def calc_feats_scores(data, topdom, m, c, l):
-    features = []
-    scores = []
-    scores_classes = {}
-    for comment in data:
-        key = ''.join([i for i in comment[2] if not i.isdigit()])
-        comment_detail = calc_feat_score(comment, topdom, m, c, l)
-        features.append(comment_detail[1])
-        scores.append(comment_detail[3])
-
-        if key not in scores_classes:
-            scores_classes[key] = [comment_detail]
-        else:
-            scores_classes[key].append(comment_detail)
-
-    avg_classes = {}
-    labels_classes = {}
-    for major, detailed_comments in scores_classes.items():
-        # Calculate average score for the major
-        totalscore = sum([s for (i, j, k, s) in detailed_comments])
-        avgscore = (totalscore * 1.0) / len(detailed_comments)
-        avg_classes[major] = avgscore
-
-        # Sort the detailed comments by score in the major
-        sorted_d_c = sorted(detailed_comments, key=operator.itemgetter(3), reverse=True)
-        scores_classes[major] = sorted_d_c
-
-        # Create labels
-        major_labels = []
-        for comment_details in scores_classes[major]:
-            if comment_details[3] >= avgscore:
-                major_labels.append(1)
-            else:
-                major_labels.append(0)
-        labels_classes[major] = major_labels
-
-    # Create labels for data
-    labels = []
-    for i, comment in enumerate(data):
-        key = ''.join([i for i in comment[2] if not i.isdigit()])
-        avgscore = avg_classes[key]
-        score = scores[i]
-        if score >= avgscore:
-            labels.append(1)
-        else:
-            labels.append(0)
-
-    return features, scores, scores_classes, avg_classes, labels, labels_classes
-
 def getRandomData(og_data, x):
     n = len(og_data)
     xs = random.sample(range(0, n), x)
@@ -373,11 +357,32 @@ def getRandomData(og_data, x):
 if __name__ == '__main__':
     data, classes, og_data = parse_data("./comments.csv")
     freqs_bcn = parse_BCN_data("./lemma.al")
-    RR = RevRank((data, classes), [], [], freqs_bcn)
-    for i, label in enumerate(RR.labels):
-        print (og_data[i])
-        print (label)
-        print ()
+    RR = RevRank((data, classes, og_data), [], [], freqs_bcn)
+
+    
+    # helpful, indices = RR.get_most_helpful_per_class("NURS", 3)
+    # nhelpful, nindices = RR.get_most_helpful_per_class("NURS", 3, reverse=True)
+    # print (helpful)
+    # print()
+    # print(nhelpful)
+    #
+    # helpful, indices = RR.get_most_helpful_in_model(10)
+    # nhelpful, nindices = RR.get_most_helpful_in_model(10, reverse=True)
+    # for h in helpful:
+    #     print (h)
+    #
+    # print("\nNot Helpful\n")
+    # for nh in nhelpful:
+    #     print(nh)
+
+
+
+    # for i, label in enumerate(RR.labels):
+    #     print (og_data[i])
+    #     print (label)
+    #     print ()
+
+
 
 
 
