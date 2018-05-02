@@ -28,6 +28,152 @@ class Clustering(object):
     def __init__(self, algorithm, trainX, trainY, testX, testY):
         None
 
+# RevRank Algorithm
+class RevRank():
+    def __init__(self, trainX, testX, testY, corpus_data, m=200):
+        self.trainX, self.trainX_class = trainX
+        self.testX, self.testY = testX, testY
+        self.corpus_data = corpus_data
+        self.trainX_freq = get_count(self.trainX_class)
+        self.m = m
+
+        print("Training")
+        self.model = self.train()
+        print("Featurizing")
+        self.features_classes, self.features = self.featurize(self.trainX)
+        print("Scoring")
+        self.scores_classes, self.scores, self.scores_classes_avg = self.score(self.trainX)
+        print("Labeling")
+        self.labels_classes, self.labels = self.label(self.trainX)
+
+    # Helper methods
+    def _getClass(self, comment):
+        key = ''.join([i for i in comment[2] if not i.isdigit()])
+
+        return key
+
+    # Train method to train data and compute optimal feature vectors for each major
+    def train(self, c=20):
+        model = {}
+        for major, freqs in self.trainX_freq.items():
+            word_doms = []
+            for word, wfreq in freqs.items():
+                Bval = self.corpus_data[word] if word in self.corpus_data else 4
+                Dval = wfreq * c * (1 / math.log(Bval))
+                word_doms.append((word, Dval))
+            word_doms = sorted(word_doms, key=operator.itemgetter(1), reverse=True)[:self.m]
+            word_doms = [x[0] for x in word_doms]
+            model[major] = word_doms
+
+        return model
+
+    # Featurize methods
+    # Method to translate an example into a feature vector
+    def featurize_example(self, comment):
+        major = self._getClass(comment)
+        words = comment[4:]
+        xi = [0] * self.m
+        major_optimal_features = self.model[major]
+
+        for word in words:
+            if word in major_optimal_features:
+                word_index = major_optimal_features.index(word)
+                xi[word_index] = 1
+
+        return xi
+
+    # Method to translate the data into feature vectors
+    def featurize(self, data):
+        features_classes = {}
+        features = []
+        for comment in data:
+            comment_major = self._getClass(comment)
+            comment_feats = self.featurize_example(comment)
+            features.append(comment_feats)
+            if comment_major not in features_classes:
+                features_classes[comment_major] = [comment_feats]
+            else:
+                features_classes[comment_major].append(comment_feats)
+
+        return features_classes, features
+
+    # Score methods
+    # Method to score the example, get a score of how helpful the example is
+    def score_example(self, comment, c=20, l=25):
+        words = comment[4:]
+        comment_feats = self.featurize_example(comment)
+        r = len(words)
+        d = sum([i*j for (i, j) in zip(comment_feats, [1] * self.m)])
+        p = c if r <= l else 1
+        score = (1.0 / p) * (d * 1.0 / r)
+
+        return score
+
+    # Method to score all the examples in training data
+    def score(self, data, c=20, l=25):
+        scores_classes = {}
+        scores = []
+        for comment in data:
+            comment_major = self._getClass(comment)
+            comment_score = self.score_example(comment, c, l)
+            scores.append(comment_score)
+            if comment_major not in scores_classes:
+                scores_classes[comment_major] = [comment_score]
+            else:
+                scores_classes[comment_major].append(comment_score)
+
+        scores_classes_avg = {}
+        for major, major_scores in scores_classes.items():
+            s = sum(major_scores)
+            n = len(major_scores)
+            scores_classes_avg[major] = (s * 1.0) / n
+
+        return scores_classes, scores, scores_classes_avg
+
+    # Label methods
+    # Method to label the example as 1 for helpful, 0 for not helpful
+    def label_example(self, comment, c=20, l=25):
+        comment_major = self._getClass(comment)
+        comment_major_avgscore = self.scores_classes_avg[comment_major]
+        comment_score = self.score_example(comment, c, l)
+        if comment_score >= comment_major_avgscore:
+            return 1
+        else:
+            return 0
+
+    # Method to label the examples in the data
+    def label(self, data, c=20, l=25):
+        labels_classes = {}
+        labels = []
+        for comment in data:
+            comment_major = self._getClass(comment)
+            comment_label = self.label_example(comment, c, l)
+            labels.append(comment_label)
+            if comment_major not in labels_classes:
+                labels_classes[comment_major] = [comment_label]
+            else:
+                labels_classes[comment_major].append(comment_label)
+
+        return labels_classes, labels
+
+    # Test methods
+    # Method to measure accuracy of labeling
+    def testAccuracy(self, c=20, l=25):
+        test_labels_classes, test_labels = self.label(self.testX)
+        correct = 0
+        n = 0
+        for i, label in test_labels:
+            real_label = self.testY[i]
+            if real_label == label:
+                correct += 1
+            n += 1
+
+        return (correct * 1.0) / n
+
+
+
+
+
 # Method to parse the raw csv file of comments. Parse heuristic: Read file line by line, check if line starts with Name or not
 def parse_data(path):
     og_data = []
@@ -224,10 +370,18 @@ def getRandomData(og_data, x):
 
 
 
-
 if __name__ == '__main__':
     data, classes, og_data = parse_data("./comments.csv")
-    getRandomData(og_data, 200)
+    freqs_bcn = parse_BCN_data("./lemma.al")
+    RR = RevRank((data, classes), [], [], freqs_bcn)
+    for i, label in enumerate(RR.labels):
+        print (og_data[i])
+        print (label)
+        print ()
+
+
+
+    # getRandomData(og_data, 200)
     # print(len(data))
     # print(data[0])
     # s = 0
@@ -239,16 +393,16 @@ if __name__ == '__main__':
     # for (key,val) in classes.items():
     #     v += len(val)
     # print (v * 1.0 / (len(classes))) #5556.14
-    freqs = get_count(classes)
+    # freqs = get_count(classes)
     # print(len(freqs["NURS"])) #5493
     # print (freqs)
 
-    freqs_bcn = parse_BCN_data("./lemma.al")
+    # freqs_bcn = parse_BCN_data("./lemma.al")
     # print(freqs_bcn["great"]) #643.69
     # print(len(classes)) #107 documents, or majors
 
-    dom, topdom = calc_dominance(freqs, freqs_bcn, 3, 200)
-    feats, scores, classes_details, avg_classes, labels, labels_classes = calc_feats_scores(data, topdom, 200, 20, 25)
+    # dom, topdom = calc_dominance(freqs, freqs_bcn, 3, 200)
+    # feats, scores, classes_details, avg_classes, labels, labels_classes = calc_feats_scores(data, topdom, 200, 20, 25)
     # print(len(feats))
     # print(feats[0])
     # print(len(scores))
@@ -256,10 +410,10 @@ if __name__ == '__main__':
     # print(classes_details["NURS"])
     # print(len(classes_details))
 
-    print(data[:10])
-    print(labels[:10])
-    print ()
-    print(classes_details["NURS"][:10])
-    print(labels_classes["NURS"][:10])
-    print ()
-    print (avg_classes)
+    # print(data[:10])
+    # print(labels[:10])
+    # print ()
+    # print(classes_details["NURS"][:10])
+    # print(labels_classes["NURS"][:10])
+    # print ()
+    # print (avg_classes)
