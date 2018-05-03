@@ -94,7 +94,6 @@ class RevRank():
 
         return helpful, top_k_indices
 
-
     # Method to get the most helpful comments and corresponding indices according to the data parameter.
     def get_most_helpful(self, data, k, c=20, l=25, reverse=False):
         data_scores_classes, data_scores, data_scores_classes_avg = self.score(data, c, l)
@@ -111,7 +110,6 @@ class RevRank():
             helpful.append(data[index])
 
         return helpful, top_k_indices
-
 
     # Helper methods
     def _getClass(self, comment):
@@ -359,7 +357,7 @@ if __name__ == '__main__':
     freqs_bcn = parse_BCN_data("./lemma.al")
     RR = RevRank((data, classes, og_data), [], [], freqs_bcn)
 
-    
+
     # helpful, indices = RR.get_most_helpful_per_class("NURS", 3)
     # nhelpful, nindices = RR.get_most_helpful_per_class("NURS", 3, reverse=True)
     # print (helpful)
@@ -405,20 +403,3 @@ if __name__ == '__main__':
     # freqs_bcn = parse_BCN_data("./lemma.al")
     # print(freqs_bcn["great"]) #643.69
     # print(len(classes)) #107 documents, or majors
-
-    # dom, topdom = calc_dominance(freqs, freqs_bcn, 3, 200)
-    # feats, scores, classes_details, avg_classes, labels, labels_classes = calc_feats_scores(data, topdom, 200, 20, 25)
-    # print(len(feats))
-    # print(feats[0])
-    # print(len(scores))
-    # print(scores[0])
-    # print(classes_details["NURS"])
-    # print(len(classes_details))
-
-    # print(data[:10])
-    # print(labels[:10])
-    # print ()
-    # print(classes_details["NURS"][:10])
-    # print(labels_classes["NURS"][:10])
-    # print ()
-    # print (avg_classes)
