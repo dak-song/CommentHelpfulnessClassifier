@@ -5,13 +5,17 @@ import string
 # from profanity import profanity
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
-from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, TfidfTransformer
+from sklearn.cluster import KMeans
 from collections import Counter
 from nltk.corpus.reader.bnc import BNCCorpusReader
 import time
 import math
 import operator
 import random
+import pandas as pd
+import numpy as np
+from sklearn.externals import joblib  # pickle
 
 # Stopwords and lemmatizer
 nltk.download('wordnet')
@@ -29,6 +33,8 @@ class Clustering(object):
         None
 
 # RevRank Algorithm
+
+
 class RevRank():
     def __init__(self, trainX, testX, testY, corpus_data, m=200):
         self.trainX, self.trainX_class, self.rawX = trainX
@@ -168,7 +174,7 @@ class RevRank():
         words = comment[4:]
         comment_feats = self.featurize_example(comment)
         r = len(words)
-        d = sum([i*j for (i, j) in zip(comment_feats, [1] * self.m)])
+        d = sum([i * j for (i, j) in zip(comment_feats, [1] * self.m)])
         p = c if r <= l else 1
         score = (1.0 / p) * (d * 1.0 / r)
 
@@ -240,9 +246,6 @@ class RevRank():
         return (correct * 1.0) / n
 
 
-
-
-
 # Method to parse the raw csv file of comments. Parse heuristic: Read file line by line, check if line starts with Name or not
 def parse_data(path):
     og_data = []
@@ -296,7 +299,54 @@ def parse_data(path):
 
     return data, classes, og_data
 
+# Method to parse csv into pandas dataframe
+
+
+def parse_dataframe(path, column_names):
+
+    return pd.read_csv(path, sep=',', names=column_names)
+
+# KMeans algorithm
+
+
+class KM():
+    # Input: training and test data, parsed comments of list of lists of tokenized words excluding name, class, term
+    def __init__(self, trainX, testX, testY):
+        #self.trainX, self.trainX_class, self.rawX = trainX
+        #self.testX, self.testY = testX, testY
+        self.trainX = trainX
+        self.textX = testX
+        self.testY = testY
+        #self.trainX_freq = get_count(self.trainX_class)
+        #self.m = m
+        #self.comments = parsed_comments
+
+    # def get_parsed_comments(self, values):
+    #     # comments = []
+    #     # for review in values:
+    #     #     curr_comment = []
+    #     #     curr_comment.append(review[3])
+    #     #     comments.append(curr_comment)
+    #     # return comments
+    #     return self.comments
+
+    def predict(self, num_clusters):
+        # tfidf_vectorizer = TfidfVectorizer(max_df=0.8, max_features=200000,
+        #                                    min_df=0.2, stop_words='english',
+        #                                    use_idf=True, ngram_range=(1, 3), lowercase=False)
+        tfidf_vectorizer = TfidfVectorizer(tokenizer=tokenize, lowercase=False)
+        # print(self.df.columns.values)
+        # print(self.df['Comment'].tolist())
+        tfidf_matrix = tfidf_vectorizer.fit_transform(self.comments)
+        km = KMeans(n_clusters=num_clusters)
+        km.fit(tfidf_matrix)
+        clusters = km.labels_.tolist()
+        return clusters
+
+
 # Method that returns dictionary of {(Last name, first name, classID, term) : Count of words in comment}
+
+
 def get_count(classes):
     term_frequencies = {}
     for key, value in classes.items():
@@ -305,27 +355,17 @@ def get_count(classes):
     return term_frequencies
 
 # Method to tokenize a list of words
+
+
 def tokenize(words):
     # rid of \n and \t
     # words = [x.strip('\t') for x in words]
-    # make words lowercase
-    # words = [x.lower() for x in words]
-    # remove stopwords
     words = [lmtzr.lemmatize(x) for x in words if x not in stops]
-    # rid of punctuation
-    # words = [''.join(x for x in s if x not in string.punctuation) for s in words]
-    # remove stopwords again
-    # words = [x for x in words if x not in stops]
-    # rid of '' again
-    # words = [x for x in words if x]
-    # rid of digits
-    # words = [x for x in words if not any(c.isdigit() for c in x)]
-    # words = [x for x in words if not (x.isdigit() or x[0] == '-' and x[1:].isdigit())]
-    # words = [lmtzr.lemmatize(x) for x in words]
-    # words = [x for x in words if len(x) > 2]
     return words
 
 # Method to parse the BCN corpus data and return frequencies of each word
+
+
 def parse_BCN_data(path):
     freq = {}
     with open(path) as f:
@@ -340,6 +380,7 @@ def parse_BCN_data(path):
 
     return freq
 
+
 def getRandomData(og_data, x):
     n = len(og_data)
     xs = random.sample(range(0, n), x)
@@ -350,13 +391,48 @@ def getRandomData(og_data, x):
             f.write('\n')
 
 
-
-
 if __name__ == '__main__':
     data, classes, og_data = parse_data("./comments.csv")
-    freqs_bcn = parse_BCN_data("./lemma.al")
-    RR = RevRank((data, classes, og_data), [], [], freqs_bcn)
+    parsed_comments = [[word for word in word_list[4:]] for word_list in data]  # list of lists of classes' parsed comments
+    # Split parsed_comments into training and test set
+    KMtestX, KMtrainX = parsed_comments[:105], parsed_comments[105:]
 
+    # freqs_bcn = parse_BCN_data("./lemma.al")
+    # print("data: ", data)
+    # print()
+    # print("data with original comments: ", og_data)
+    # print(freqs_bcn)
+    # print(pd.read_csv('./comments.csv', sep=',').values[0][1])
+
+    # RR = RevRank((data, classes, og_data), [], [], freqs_bcn)
+    #df = parse_dataframe("./comments.csv", ['Name', 'Course', 'Term', 'Comment'])
+    #KM = KM((data, classes, og_data), [], [], df, parsed_comments)
+    #print(KM.predict(comments=KM.get_all_comments(KM.get_values()), num_clusters=5))
+
+    # Import test data
+    mturk_labels = ['Instructor', 'Section Term', 'Helpful1', 'Rank1', 'Helpful2', 'Rank2', 'Helpful3', 'Rank3']
+    mturk = parse_dataframe("./MTurk_data.csv", mturk_labels)
+    # List of rankings
+    testY1 = mturk['Rank1'].tolist()
+    testY2 = mturk['Rank2'].tolist()
+    # List of binary helpfulness indicators
+    helpfulY1 = mturk['Helpful1'].tolist()
+    helpfulY2 = mturk['Helpful2'].tolist()
+
+    # Calculate inter-rater agreement (Between person 1 and 2)
+    agreed_ranking = 0
+    agreed_helpful = 0
+    for i, score in enumerate(testY1):
+        if score == testY2[i]:
+            agreed_ranking += 1
+        if helpfulY1[i] == helpfulY2[i]:
+            agreed_helpful += 1
+
+    agreement_ranking = agreed_ranking / len(testY1)
+    print("Agreement on ranking: ", agreement_ranking)
+
+    agreement_helpful = agreed_helpful / len(testY1)
+    print("Agreement on helpful: ", agreement_helpful)
 
     # helpful, indices = RR.get_most_helpful_per_class("NURS", 3)
     # nhelpful, nindices = RR.get_most_helpful_per_class("NURS", 3, reverse=True)
@@ -373,16 +449,10 @@ if __name__ == '__main__':
     # for nh in nhelpful:
     #     print(nh)
 
-
-
     # for i, label in enumerate(RR.labels):
     #     print (og_data[i])
     #     print (label)
     #     print ()
-
-
-
-
 
     # getRandomData(og_data, 200)
     # print(len(data))
