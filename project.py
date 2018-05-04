@@ -341,7 +341,6 @@ class KM():
         tfidf_vectorizer = TfidfVectorizer(tokenizer=tokenize, lowercase=False)
         tfidf_matrix = tfidf_vectorizer.fit(self.trainX)
         tfidf_matrix = tfidf_vectorizer.transform(self.trainX)
-        print(tfidf_matrix.get_feature_names())
         km = KMeans(n_clusters=num_clusters)
         model = km.fit(tfidf_matrix)
         return model
@@ -422,7 +421,8 @@ if __name__ == '__main__':
     helpfulY1 = mturk['Helpful1'].tolist()
     helpfulY2 = mturk['Helpful2'].tolist()
 
-# Comparing mTurk to RevRank labels
+    # Comparing mTurk to RevRank labels
+
     RR_labels_classes, RR_labels = RR.get_labels()
     n = len(helpfulY1)
     acc1 = 0
@@ -473,8 +473,12 @@ if __name__ == '__main__':
     print("mTurk 1 RevRank rankings: ", ((acc1 * 1.0) / n))
     print("mTurk 2 RevRank rankings: ", ((acc2 * 1.0) / n))
 
-
-# Calculate inter-rater agreement (Between person 1 and 2)
+    # Calculate inter-rater agreement (Between person 1 and 2)
+    KMtrainX, KMtestX = parsed_comments[105:], parsed_comments[:105]
+    KMtestY = testY1
+    KM = KM(KMtrainX, KMtestX, KMtestY)
+    #print(KM.predict(comments=KM.get_all_comments(KM.get_values()), num_clusters=5))
+    print(KM.predict(KM.fit(5), KMtestY))
     agreed_ranking = 0
     agreed_helpful = 0
     for i, score in enumerate(testY1):
