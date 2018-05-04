@@ -310,7 +310,7 @@ def parse_dataframe(path, column_names):
 
 
 class KM():
-    # Input: training and test data, parsed comments of list of lists of tokenized words excluding name, class, term
+    # Input: training and test data (list of lists), test data labels (list)
     def __init__(self, trainX, testX, testY):
         #self.trainX, self.trainX_class, self.rawX = trainX
         #self.testX, self.testY = testX, testY
@@ -318,30 +318,23 @@ class KM():
         self.textX = testX
         self.testY = testY
         #self.trainX_freq = get_count(self.trainX_class)
-        #self.m = m
-        #self.comments = parsed_comments
 
-    # def get_parsed_comments(self, values):
-    #     # comments = []
-    #     # for review in values:
-    #     #     curr_comment = []
-    #     #     curr_comment.append(review[3])
-    #     #     comments.append(curr_comment)
-    #     # return comments
-    #     return self.comments
-
-    def predict(self, num_clusters):
+    def fit(self, num_clusters):
         # tfidf_vectorizer = TfidfVectorizer(max_df=0.8, max_features=200000,
         #                                    min_df=0.2, stop_words='english',
         #                                    use_idf=True, ngram_range=(1, 3), lowercase=False)
         tfidf_vectorizer = TfidfVectorizer(tokenizer=tokenize, lowercase=False)
-        # print(self.df.columns.values)
-        # print(self.df['Comment'].tolist())
-        tfidf_matrix = tfidf_vectorizer.fit_transform(self.comments)
+        tfidf_matrix = tfidf_vectorizer.fit(self.trainX)
+        tfidf_matrix = tfidf_vectorizer.transform(self.trainX)
+        print(tfidf_matrix.get_feature_names())
         km = KMeans(n_clusters=num_clusters)
-        km.fit(tfidf_matrix)
-        clusters = km.labels_.tolist()
-        return clusters
+        model = km.fit(tfidf_matrix)
+        return model
+        # clusters = km.labels_.tolist()
+        # return clusters
+
+    def predict(self, model, data):
+        return model.predict(data)
 
 
 # Method that returns dictionary of {(Last name, first name, classID, term) : Count of words in comment}
@@ -394,8 +387,6 @@ def getRandomData(og_data, x):
 if __name__ == '__main__':
     data, classes, og_data = parse_data("./comments.csv")
     parsed_comments = [[word for word in word_list[4:]] for word_list in data]  # list of lists of classes' parsed comments
-    # Split parsed_comments into training and test set
-    KMtestX, KMtrainX = parsed_comments[:105], parsed_comments[105:]
 
     # freqs_bcn = parse_BCN_data("./lemma.al")
     # print("data: ", data)
@@ -406,11 +397,9 @@ if __name__ == '__main__':
 
     # RR = RevRank((data, classes, og_data), [], [], freqs_bcn)
     #df = parse_dataframe("./comments.csv", ['Name', 'Course', 'Term', 'Comment'])
-    #KM = KM((data, classes, og_data), [], [], df, parsed_comments)
-    #print(KM.predict(comments=KM.get_all_comments(KM.get_values()), num_clusters=5))
 
     # Import test data
-    mturk_labels = ['Instructor', 'Section Term', 'Helpful1', 'Rank1', 'Helpful2', 'Rank2', 'Helpful3', 'Rank3']
+    mturk_labels = ['Instructor', 'Section', 'Term', 'Helpful1', 'Rank1', 'Helpful2', 'Rank2', 'Helpful3', 'Rank3']
     mturk = parse_dataframe("./MTurk_data.csv", mturk_labels)
     # List of rankings
     testY1 = mturk['Rank1'].tolist()
@@ -418,6 +407,13 @@ if __name__ == '__main__':
     # List of binary helpfulness indicators
     helpfulY1 = mturk['Helpful1'].tolist()
     helpfulY2 = mturk['Helpful2'].tolist()
+
+    # Split parsed_comments into training and test set
+    KMtestX, KMtrainX = parsed_comments[:105], parsed_comments[105:]
+    KMtestY = testY1
+    KM = KM(KMtrainX, KMtestX, KMtestY)
+    #print(KM.predict(comments=KM.get_all_comments(KM.get_values()), num_clusters=5))
+    print(KM.predict(KM.fit(5), KMtestY))
 
     # Calculate inter-rater agreement (Between person 1 and 2)
     agreed_ranking = 0
