@@ -473,12 +473,12 @@ if __name__ == '__main__':
         i_classid = mTurk_classids[i]
         i_rank1 = testY1[i]
         i_rank2 = testY2[i]
-        print (i_rank1, i_rank2, i_classid)
-        print (RR_rankings_classid[i_classid])
         comment_at_i_rank1 = RR_rankings_classid[i_classid][i_rank1-1]
         comment_at_i_rank2 = RR_rankings_classid[i_classid][i_rank2-1]
 
         if comment_at_i_rank1[0] == i:
+            print(i, og_data[i])
+            print()
             acc1 += 1
         if comment_at_i_rank2[0] == i:
             acc2 += 1
