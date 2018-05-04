@@ -65,6 +65,21 @@ class RevRank():
     def get_labels(self):
         return self.labels_classes, self.labels
 
+    def get_rankings_by_classid(self):
+        rankings_by_classid = {}
+        for (i, comment_score) in enumerate(self.scores):
+            comment_classid = self.trainX[i][2]
+            if comment_classid not in rankings_by_classid:
+                rankings_by_classid[comment_classid] = [(i, comment_score)]
+            else:
+                rankings_by_classid[comment_classid].append((i, comment_score))
+
+        for classid, classid_scores in rankings_by_classid.items():
+            classid_scores = sorted(classid_scores, key=operator.itemgetter(1), reverse=True)
+            rankings_by_classid[classid] = classid_scores
+
+        return rankings_by_classid
+
     # Method to get the most helpful comments and corresponding indices in the training data for a particular class
     def get_most_helpful_per_class(self, major, k, reverse=False):
         major_scores = self.scores_classes[major]
@@ -386,16 +401,15 @@ def getRandomData(og_data, x):
 
 if __name__ == '__main__':
     data, classes, og_data = parse_data("./comments.csv")
+    print(data[:10])
     parsed_comments = [[word for word in word_list[4:]] for word_list in data]  # list of lists of classes' parsed comments
 
-    # freqs_bcn = parse_BCN_data("./lemma.al")
-    # print("data: ", data)
-    # print()
-    # print("data with original comments: ", og_data)
-    # print(freqs_bcn)
+    freqs_bcn = parse_BCN_data("./lemma.al")
+
     # print(pd.read_csv('./comments.csv', sep=',').values[0][1])
 
-    # RR = RevRank((data, classes, og_data), [], [], freqs_bcn)
+    RR = RevRank((data, classes, og_data), [], [], freqs_bcn)
+
     #df = parse_dataframe("./comments.csv", ['Name', 'Course', 'Term', 'Comment'])
 
     # Import test data
@@ -408,14 +422,59 @@ if __name__ == '__main__':
     helpfulY1 = mturk['Helpful1'].tolist()
     helpfulY2 = mturk['Helpful2'].tolist()
 
-    # Split parsed_comments into training and test set
-    KMtestX, KMtrainX = parsed_comments[:105], parsed_comments[105:]
-    KMtestY = testY1
-    KM = KM(KMtrainX, KMtestX, KMtestY)
-    #print(KM.predict(comments=KM.get_all_comments(KM.get_values()), num_clusters=5))
-    print(KM.predict(KM.fit(5), KMtestY))
+# Comparing mTurk to RevRank labels
+    RR_labels_classes, RR_labels = RR.get_labels()
+    n = len(helpfulY1)
+    acc1 = 0
+    acc2 = 0
+    index1 = []
+    index2 = []
+    for i in range(n):
+        RR_i_label = RR_labels[i]
+        if RR_i_label == helpfulY1[i]:
+            acc1 += 1
+        else:
+            index1.append(i)
+        if RR_i_label == helpfulY2[i]:
+            acc2 += 1
+        else:
+            index2.append(i)
 
-    # Calculate inter-rater agreement (Between person 1 and 2)
+    print(index1)
+    print(index2)
+    print(len(index1))
+    print(len(index2))
+    print(acc1)
+    print(acc2)
+    print("mTurk 1 accuracy: ", ((acc1 * 1.0) / n))
+    print("mTurk 2 accuracy: ", ((acc2 * 1.0) / n))
+
+    # Comparing mTurk rankings to RevRank rankings
+    print("Comparing Rankings MTurk, RevRank")
+    RR_rankings_classid = RR.get_rankings_by_classid()
+    mTurk_classids = mturk['Section'].tolist()
+    n = len(testY1)
+    acc1 = 0
+    acc2 = 0
+    for i in range(n):
+        i_classid = mTurk_classids[i]
+        i_rank1 = testY1[i]
+        i_rank2 = testY2[i]
+        comment_at_i_rank1 = RR_rankings_classid[i_classid][i_rank1 - 1]
+        comment_at_i_rank2 = RR_rankings_classid[i_classid][i_rank2 - 1]
+
+        if comment_at_i_rank1[0] == i:
+            print(i, og_data[i])
+            print()
+            acc1 += 1
+        if comment_at_i_rank2[0] == i:
+            acc2 += 1
+
+    print("mTurk 1 RevRank rankings: ", ((acc1 * 1.0) / n))
+    print("mTurk 2 RevRank rankings: ", ((acc2 * 1.0) / n))
+
+
+# Calculate inter-rater agreement (Between person 1 and 2)
     agreed_ranking = 0
     agreed_helpful = 0
     for i, score in enumerate(testY1):
